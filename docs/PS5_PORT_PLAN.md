@@ -1,15 +1,15 @@
 # Conker: Recompiled — PS5 port plan
 
-Status: initial source audit; owner-approved 4:3 / 30 fps baseline and reusable RetroAchievements stretch goal.
+Status: initial source audit; owner-approved 4:3 / 30 fps baseline, local bring-your-own-ROM PS5 builder, ROM-free public release, and reusable RetroAchievements stretch goal.
 Date: 2026-10-04.
 Working branch: `ps5/dev`.
 Audited game revision: `5ea55d149eef2ff1ea36718013025c5e67619db9`.
-First delivery format: native home-screen title, as selected by the owner.
+First delivery format: locally built native home-screen title, as selected by the owner.
 No PS5 executable has been built or tested in this audit.
 
 ## Product goal
 
-A standalone Conker title that feels at home on PS5: controller-only setup, fast repeat launches, dependable saves, clean frame pacing, readable television UI, PlayStation button prompts, and deliberate DualSense feedback. Vulkan is the preferred graphics path. Maintain the game's character and timing while improving presentation.
+A standalone Conker title that feels at home on PS5: controller-only in-app use after the user builds the title from their own ROM and transfers it, fast repeat launches, dependable saves, clean frame pacing, readable television UI, PlayStation button prompts, and deliberate DualSense feedback. Vulkan is the preferred graphics path. Maintain the game's character and timing while improving presentation.
 
 The initial release target is 1080p SDR display output containing a centered 4:3 game viewport, original game timing, and game presentation capped at 30 fps. Disable widescreen expansion and interpolation-generated intermediate game frames. Fill unused left/right areas with static decorative banners, with a plain-black option. At 1920×1080, a full-height 4:3 viewport is 1440×1080 with 240-pixel side areas; at 3840×2160 it is 2880×2160 with 480-pixel side areas. These dimensions describe composition, not a guaranteed internal render resolution.
 
@@ -72,7 +72,21 @@ Keep the desktop build working. Use explicit PS5 build options rather than scatt
 
 Preferred graphics chain: Conker display lists → patched RT64 → Plume PS5 backend → PS5 RADV → VideoOut. Use the driver's display WSI to own presentation; avoid opening a competing VideoOut backend for game frames.
 
-First inspect SDK-provided C/C++ runtime facilities and native-title imports before borrowing RetroArch shims. Its libretro-specific plumbing is not automatically appropriate here. Retain attribution and compatible source/license notices for any reused platform or packaging code. Keep ROMs, extracted assets and generated game data out of version control and CI artifacts.
+First inspect SDK-provided C/C++ runtime facilities and native-title imports before borrowing RetroArch shims. Its libretro-specific plumbing is not automatically appropriate here. Retain attribution and compatible source/license notices for any reused platform or packaging code. Keep ROMs, extracted assets and generated game data out of version control and public CI artifacts. Private local builds may use the owner's ROM for development and console tests; never publish that input or its extracted assets.
+
+### Local ROM-to-title builder and public-release boundary
+
+Use a unique `PPSA#####` title ID, matching the four-letter/five-digit format used by current native PS5 homebrew examples. Check the exact ID for collisions before fixing `titleId`, `conceptId`, `contentId`, and the install-folder name. The owner's proposed `PSAPPS#####` spelling is a working description, not the package ID format.
+
+The public release is source code, build instructions and a ROM-free build tool; it does not include a playable PS5 binary. The user supplies a supported US big-endian `.z64` ROM on their computer. A future local PS5 builder accepts its path (the owner's private root `ROM/` is the development input), validates the ROM, runs the existing `recomp/recompile.py` pipeline with host-built N64Recomp/RSPRecomp, cross-compiles the ROM-derived code and PS5 runtime, and stages a complete native-title folder under ignored `out/ps5/<TITLE_ID>/`. It copies the user's ROM to that folder's `ROM/` directory under a documented filename and verifies that the staged ROM matches the build input. All ROM-derived source, binaries, extracted assets and completed title folders remain local. Pin the host tools, target SDK and driver revisions, and make the builder report missing prerequisites and failed stages clearly. The exact command is documented after the build works end to end.
+
+The first packaging helper, `tools/ps5/stage_local_title.py`, now performs the private folder copy and ROM hash check. It requires a locally built `eboot.bin`, title metadata and a compatible `sce_module/libc.prx`; it does not build those inputs. Do not put a firmware-specific module in this repository or a public release. The native-title linker, C++ runtime, module source and firmware compatibility remain milestone-1 decisions.
+
+The user copies `out/ps5/<TITLE_ID>/` over FTP to `/data/homebrew/<TITLE_ID>/` with a compatible console FTP service, then registers/launches it through the validated ShadowMountPlus path. On launch, the app checks the staged ROM and gives controller-navigable missing/invalid-ROM guidance; it does not compile game code on the PS5. Saves and settings use a separate writable per-user location validated on hardware. A title update must preserve the user's ROM and save data. Verify the FTP path, title registration, ROM read permissions and update behavior on the owner's console before treating this as a working installation recipe.
+
+The repository's root `ROM/` and builder output `out/ps5/` are private and ignored by Git. Public releases must contain zero ROM files, extracted game assets, generated game source, ROM-derived binaries or completed title folders. The current build compiles ROM-derived `RecompiledFuncs` into `ConkerRecomp`, so a prebuilt game binary is outside this release model. Keep public CI and release packaging separate from private local builds, and add archive-content and build-provenance checks to the public release gate.
+
+This follows the fork's existing desktop model: a user-provided ROM drives static recompilation on the build computer, and the resulting executable carries the generated code. First launch may prepare a private asset cache if needed, but no on-console compiler or dynamic recompiler is required for the baseline port.
 
 ## Milestones and acceptance gates
 
@@ -80,22 +94,22 @@ Advance on demonstrated results. Effort ranges are provisional focused engineeri
 
 | Milestone | Visible result | Acceptance gate | Rough effort |
 | --- | --- | --- | --- |
-| 0 — Reproducible baseline | Desktop baseline and documented PS5 target | Owner-provided US ROM builds locally; record representative scenes and known bugs. Pin toolchain/SDK/driver dependencies; capture firmware, loader and display details. | 2–4 days |
-| 1 — Native title shell | Conker tile launches a diagnostic screen on PS5 | Three cold launches; pad navigation, native audio test, writable-file round trip and clean exit. Embed build ID; preserve useful logs after failure. | 3–7 days |
+| 0 — Reproducible baseline | Desktop baseline and documented PS5 target | Owner-provided US ROM builds locally; record representative scenes and known bugs. Pin toolchain/SDK/driver dependencies; capture firmware, loader and display details. Define the ROM-free public source/tool release and ignored local title output. | 2–4 days |
+| 1 — Native title shell | Conker tile launches a diagnostic screen on PS5 | Three cold launches; pad navigation, native audio test, writable-file round trip, missing-ROM guidance and clean exit. Embed build ID; preserve useful logs after failure. | 3–7 days |
 | 2 — Vulkan and RT64 proof | Actual RT64 output on the console | RADV triangle/texture/compute/depth/readback probes, then RT64 render-context and representative shader pipelines. Test ubershader and specialization, image formats, descriptor behavior, VMA allocation and swapchain acquisition/present. Correct output for 10 minutes. | 5–15 days |
 | 3 — First playable slice | Intro → menu → 4:3 gameplay with sound and side banners | Game presentation capped at 30 fps without generated interpolation frames; original runtime timing; synchronized music/voices; EEPROM survives exit/relaunch; one continuous 30-minute session. | 5–15 days |
 | 4 — Gameplay alpha | Representative campaign and local multiplayer | Chapter progression tests; four-player splitscreen where hardware allows; 2-hour soak; no unexplained hangs or save loss. Track regressions against desktop captures. | 10–20 days |
 | 5 — Performance beta | Dependable 4:3 / 30 fps preset | Measure 33.33 ms game-frame pacing, correct speed, audio and memory use; test banner/black-border composition. Qualify higher internal resolutions without changing aspect ratio or lifting the cap. Widescreen and 60/120 fps are deferred. | 5–15 days |
-| 6 — PS5 experience | Controller-first UI and purposeful DualSense feedback | ROM setup, menus, errors and settings usable from the couch; remapping, PS prompts, disconnect recovery, reliable save UX; baseline rumble plus optional native haptics. | 5–15 days |
-| 7 — Release candidate | Installable, maintainable native title | Campaign completion on PS5; repeated launch/exit and supported lifecycle tests; upgrade preserves saves/settings; documented compatibility, recovery and licenses. Hardware-tested feature matrix. | 5–10 days plus playthrough |
+| 6 — PS5 experience | Controller-first UI and purposeful DualSense feedback | After the local build and FTP transfer, ROM detection, menus, errors and settings usable from the couch; remapping, PS prompts, disconnect recovery, reliable save UX; baseline rumble plus optional native haptics. | 5–15 days |
+| 7 — Release candidate | Reproducible local title build and maintainable native title | Campaign completion on PS5; repeated launch/exit and supported lifecycle tests; upgrade preserves ROM/saves/settings; documented compatibility, recovery and licenses. Public source/tool release contains no ROM-derived data; private local build produces a validated title folder and hardware-tested feature matrix. | 5–10 days plus playthrough |
 
 The greatest schedule risk is milestone 2, followed by target C++ runtime/memory compatibility. If the graphics gate fails, report the exact failing operation and a minimal reproducer before deciding whether to adapt Plume, fix the driver, or reduce optional renderer capabilities.
 
 ### Milestone details
 
-**0: baseline and feasibility.** Reproduce the existing game before changing platform code. Separate documented source behavior from what the owner actually observes on the desktop GPU. Audit generated-code tool execution during cross-builds, target libraries, runtime mod dependencies and virtual-memory reservation requirements. Identify which mod initialization paths must be gated for an initial no-mod build. The base recompile is ahead-of-time, but optional .nrm mod/hook machinery needs its own executable-memory audit.
+**0: baseline and feasibility.** Reproduce the existing game before changing platform code. Separate documented source behavior from what the owner actually observes on the desktop GPU. Audit generated-code tool execution during cross-builds, target libraries, runtime mod dependencies and virtual-memory reservation requirements. Identify which mod initialization paths must be gated for an initial no-mod build. The base recompile is ahead-of-time, but optional .nrm mod/hook machinery needs its own executable-memory audit. Define the local ROM-to-title build stages and keep their output out of public releases.
 
-**1: title shell.** Prove packaging and platform APIs independently of Conker. Use a unique project title identity; distinguish executable assets from writable data. Exercise libc++ exceptions, filesystem, TLS, mutexes, condition variables and threads. A payload smoke test may help diagnose the native title, but home-screen launch remains the delivery target.
+**1: title shell.** Prove packaging and platform APIs independently of Conker. Use a unique project title identity; distinguish executable assets from writable data. Test the locally staged title layout, FTP copy and missing-ROM guidance. Exercise libc++ exceptions, filesystem, TLS, mutexes, condition variables and threads. A payload smoke test may help diagnose the native title, but home-screen launch remains the delivery target.
 
 **2: graphics.** Port Plume's RenderWindow type, instance extension list, Volk initialization, surface creation, size/refresh queries and present-mode selection. Prefer static proc initialization against RADV. Probe actual display modes and fall back to supported FIFO modes; do not assume desktop immediate present, display-timing or present-wait extensions. Qualify raster and compute first; ray tracing is outside the initial scope. Validate cold/warm shader caches, memory pressure and GPU readbacks. Black screens need logged Vulkan results and a bounded diagnostic path rather than silent infinite waits.
 
@@ -113,7 +127,7 @@ The greatest schedule risk is milestone 2, followed by target C++ runtime/memory
 
 | Feature | Priority | Implementation/validation condition |
 | --- | --- | --- |
-| Native title tile and couch-friendly setup | Required | Native-title packaging plus controller-only UI; no keyboard dependence. |
+| Native title tile and couch-friendly setup | Required | Local ROM-to-title build followed by FTP installation; controller-only in-app UI with no console keyboard dependence. |
 | PlayStation prompts, remapping and analog tuning | Required | All menu and gameplay paths, including multiplayer/controller changes. |
 | Native audio and dependable saves | Required | Audio pacing, graceful drain, atomic writes and persistent data across upgrades. |
 | Baseline rumble → DualSense haptics | High | Native vibration first; synthesized haptic path has external source precedent, physical feel requires owner testing. |
@@ -237,17 +251,17 @@ Create these boundaries where they help the live port; extract additional abstra
 
 ## Owner-provided test environment
 
-Reported by the owner, not independently validated: firmware **13.42**; Relapse jailbreak; kstuff and etaHEN; ShadowMountPlus for native titles. Linux or Windows desktop is available for builds; final host selection, exact enabler/loader versions, display modes, local ROM path and remote execution access remain pending.
+Reported by the owner, not independently validated: firmware **13.42**; Relapse jailbreak; kstuff and etaHEN; ShadowMountPlus for native titles. Linux or Windows desktop is available for builds; one `.z64` ROM is present in the ignored local root `ROM/` folder. Final host selection, exact enabler/loader versions, display modes and remote execution access remain pending.
 
 ## Next implementation batch
 
-1. Confirm the owner-provided target environment; record enabler/loader versions, display modes and the selected build host.
-2. Build a local desktop baseline at 4:3 / 30 fps using the owner's ROM and lock a coherent PS5 dependency set.
+1. Confirm the owner-provided target environment; record enabler/loader versions, display modes, the selected build host and a collision-free `PPSA#####` title ID.
+2. Build a local desktop baseline at 4:3 / 30 fps using the owner's ROM; lock a coherent PS5 dependency set and design the local ROM-to-title builder.
 3. Add the PS5 toolchain/host-tool separation and native diagnostic title.
 4. Create a small Vulkan capability/reporting executable and the Plume PS5 integration patch.
 5. Stop the batch at the first reproducible RT64 frame; collect console evidence before expanding gameplay scope.
 
-No live console access or ROM was supplied in this session. Compilation and hardware claims therefore remain pending.
+No live console access has been supplied. The local ROM has not yet been used for a build; compilation and hardware claims therefore remain pending.
 
 ## Source references
 
@@ -266,3 +280,5 @@ Game links use the audited revision; dependency links use their pinned revisions
 - [Mihawk native input/haptics](https://github.com/mihawk-99/PS5_RetroArch/blob/8854f31c648c918c7208a404cdb546ae2f6eb610/src/input_ps5.cpp)
 - [Mihawk native audio](https://github.com/mihawk-99/PS5_RetroArch/blob/8854f31c648c918c7208a404cdb546ae2f6eb610/src/audio_ps5.cpp)
 - [PS5 Vulkan/RADV architecture](https://github.com/mihawk-99/PS5_Vulkan/blob/4271e2e309d9a7eea3a893f5b94427bb78e586ed/README.md)
+- [Native-title folder layout, FTP installation and title-ID format](https://github.com/Rufidj/ps5link-sdk/blob/master/README.md)
+- [N64Recomp static recompiler design](https://github.com/N64Recomp/N64Recomp/blob/main/README.md)

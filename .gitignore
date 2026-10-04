@@ -19,6 +19,8 @@ __pycache__/
 /mods/*/build/
 /mods/dist/
 # Nothing from the game itself: ROMs, saves, and anything extracted from them
+/ROM/
+/out/ps5/
 *.z64
 *.n64
 *.v64

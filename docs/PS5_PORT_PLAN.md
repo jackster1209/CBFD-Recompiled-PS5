@@ -1,6 +1,6 @@
 # Conker: Recompiled — PS5 port plan
 
-Status: initial source audit and proposed implementation roadmap.
+Status: initial source audit; owner-approved 4:3 / 30 fps baseline and reusable RetroAchievements stretch goal.
 Date: 2026-10-04.
 Working branch: `ps5/dev`.
 Audited game revision: `5ea55d149eef2ff1ea36718013025c5e67619db9`.
@@ -11,7 +11,11 @@ No PS5 executable has been built or tested in this audit.
 
 A standalone Conker title that feels at home on PS5: controller-only setup, fast repeat launches, dependable saves, clean frame pacing, readable television UI, PlayStation button prompts, and deliberate DualSense feedback. Vulkan is the preferred graphics path. Maintain the game's character and timing while improving presentation.
 
-The first quality target is 1080p SDR output with correct original game timing and a stable 30 fps presentation baseline. Next prove smooth 60 fps presentation using RT64 interpolation; do not describe that as 60 Hz game simulation. Evaluate 1440p/4K rendering and 120 Hz presentation only after measured headroom and visual correctness. Internal render resolution, output resolution, presentation rate, and game update rate are separate settings and metrics.
+The initial release target is 1080p SDR display output containing a centered 4:3 game viewport, original game timing, and game presentation capped at 30 fps. Disable widescreen expansion and interpolation-generated intermediate game frames. Fill unused left/right areas with static decorative banners, with a plain-black option. At 1920×1080, a full-height 4:3 viewport is 1440×1080 with 240-pixel side areas; at 3840×2160 it is 2880×2160 with 480-pixel side areas. These dimensions describe composition, not a guaranteed internal render resolution.
+
+The HDMI display can remain at a supported 60 Hz mode, showing each 30 fps game frame for two refreshes. Preserve the runtime's original VI/audio/scheduling cadence and variable game updates; do not force every runtime callback or simulation thread to 30 Hz. Composite the banners after the correctly proportioned game image, without expanding its camera, stretching its framebuffer, or modifying HUD coordinates. The overlay uses the existing composition path and may span the display.
+
+Widescreen, 60 fps game presentation through interpolation, higher output resolutions and 120 Hz modes are deferred experiments, not requirements for the first release. Internal render resolution, output resolution, presentation rate, and game update rate remain separate metrics.
 
 Homebrew can deliver an excellent native experience. System trophies, Activities, suspend/resume, HDR, VRR, and advanced controller features require separate API and hardware validation. None is promised by this plan.
 
@@ -79,9 +83,9 @@ Advance on demonstrated results. Effort ranges are provisional focused engineeri
 | 0 — Reproducible baseline | Desktop baseline and documented PS5 target | Owner-provided US ROM builds locally; record representative scenes and known bugs. Pin toolchain/SDK/driver dependencies; capture firmware, loader and display details. | 2–4 days |
 | 1 — Native title shell | Conker tile launches a diagnostic screen on PS5 | Three cold launches; pad navigation, native audio test, writable-file round trip and clean exit. Embed build ID; preserve useful logs after failure. | 3–7 days |
 | 2 — Vulkan and RT64 proof | Actual RT64 output on the console | RADV triangle/texture/compute/depth/readback probes, then RT64 render-context and representative shader pipelines. Test ubershader and specialization, image formats, descriptor behavior, VMA allocation and swapchain acquisition/present. Correct output for 10 minutes. | 5–15 days |
-| 3 — First playable slice | Intro → menu → controllable gameplay with sound | Real controller input and original timing; synchronized music/voices; EEPROM survives exit/relaunch; one continuous 30-minute session. | 5–15 days |
+| 3 — First playable slice | Intro → menu → 4:3 gameplay with sound and side banners | Game presentation capped at 30 fps without generated interpolation frames; original runtime timing; synchronized music/voices; EEPROM survives exit/relaunch; one continuous 30-minute session. | 5–15 days |
 | 4 — Gameplay alpha | Representative campaign and local multiplayer | Chapter progression tests; four-player splitscreen where hardware allows; 2-hour soak; no unexplained hangs or save loss. Track regressions against desktop captures. | 10–20 days |
-| 5 — Performance beta | Smooth default preset and quality options | Measured 60 fps presentation where interpolation is correct, with 30 fps option; original game speed; frame-time/memory/audio reports. Qualify higher resolutions and optional 120 Hz individually. | 5–15 days |
+| 5 — Performance beta | Dependable 4:3 / 30 fps preset | Measure 33.33 ms game-frame pacing, correct speed, audio and memory use; test banner/black-border composition. Qualify higher internal resolutions without changing aspect ratio or lifting the cap. Widescreen and 60/120 fps are deferred. | 5–15 days |
 | 6 — PS5 experience | Controller-first UI and purposeful DualSense feedback | ROM setup, menus, errors and settings usable from the couch; remapping, PS prompts, disconnect recovery, reliable save UX; baseline rumble plus optional native haptics. | 5–15 days |
 | 7 — Release candidate | Installable, maintainable native title | Campaign completion on PS5; repeated launch/exit and supported lifecycle tests; upgrade preserves saves/settings; documented compatibility, recovery and licenses. Hardware-tested feature matrix. | 5–10 days plus playthrough |
 
@@ -99,7 +103,7 @@ The greatest schedule risk is milestone 2, followed by target C++ runtime/memory
 
 **4: correctness.** Include intro/cutscenes, shadows, framebuffer effects, pause blur, reflective surfaces, camera cuts, boss transitions, water and splitscreen. Test save slots, reset, relaunch and controller ordering. Keep upstream defects and PS5 regressions in separate columns.
 
-**5: optimization.** Record median/p95/p99 frame times, worst stalls, CPU/GPU timings where available, queue depth, audio underruns, peak memory and load times. Aim for 16.67 ms presentation intervals at 60 Hz; quantify exceptions rather than judging an FPS counter alone. Respect the shared CPU/GPU memory budget. Tune worker counts and pipeline warming from measurements. Do not inflate game simulation speed to chase 60/120 fps.
+**5: optimization.** Record median/p95/p99 game-frame times, worst stalls, CPU/GPU timings where available, queue depth, audio underruns, peak memory and load times. Target a maximum of 30 new game frames per second with 33.33 ms pacing where the original game sustains that rate, composed into supported display refresh modes. Separately record VI/update cadence. Quantify original-game slowdowns versus port overhead rather than judging an FPS counter alone. Respect the shared CPU/GPU memory budget. Tune worker counts and pipeline warming from measurements. Measure banner/overlay cost and avoid a separate presentation backend.
 
 **6: feel.** Auto-start after successful first-time setup; keep settings accessible without a desktop launcher. Provide UI scale/safe-area options, sensible default controls, analog dead zones, subtitles/settings inherited from the game where applicable, and haptic intensity/off controls. Map ordinary N64 rumble first. Add richer effects from semantic game events only when hooks reliably identify those events; blanket vibration is not a premium feature.
 
@@ -116,10 +120,10 @@ The greatest schedule risk is milestone 2, followed by target C++ runtime/memory
 | Adaptive triggers | Research after alpha | Confirm native API/ABI and supported firmware; semantic weapon/action hooks; disable and fallback options. |
 | Gyro aiming and touchpad shortcuts | Optional after alpha | Confirm sensor/touch reporting; calibration, opt-in behavior and sensible mappings. |
 | Controller speaker and light bar | Optional | API proof, volume/disable controls, restraint and measurable benefit. |
-| 4K render and 120 Hz output | Stretch | Supported modes, frame-time headroom and interpolation correctness; retain dependable lower-cost presets. |
+| Higher internal resolution; widescreen/high-fps modes | Deferred stretch | First release stays 4:3 / 30 fps. Higher resolution may be qualified within that baseline; widescreen and 60/120 fps require their own defect fixes and evidence. |
 | HDR and VRR | Research | Driver/VideoOut support, title metadata and display behavior must all be proven. |
 | 3D audio/Tempest | Research | Stereo output alone does not create spatial sound; requires meaningful positional source access and a usable native path. |
-| Achievements | Optional | Local persistent achievements and polished in-game notifications are attainable design targets; OS trophy integration requires a separate proof. |
+| Native RetroAchievements overlay | Stretch | Reuse rcheevos rc_client and website-managed sets/progress; PS5 networking/login/UI and per-game memory/frame adapter. Service acceptance and recompile compatibility are early gates; see the dedicated workstream below. |
 | System trophies, Activities, capture integration, full rest-mode resume | Uncommitted | Validate each capability independently; no assumption of retail SDK privileges or system-service availability. |
 
 ## Known upstream issues affecting the polish bar
@@ -130,12 +134,69 @@ The audited README reports the game has been completed upstream, but documents:
 - Character snapping and camera blending across cuts above 30 fps.
 - Limited real-GPU Linux validation.
 
-These are not verified PS5 defects. Record them in milestone 0 and prioritize interpolation/camera fixes before making a 60 fps mode the default. An impressive resolution label will not compensate for visibly broken rendering.
+These are not verified PS5 defects. The chosen 4:3 / 30 fps baseline avoids activating the documented widescreen expansion and above-30 interpolation paths; confirm that experimentally. It does not repair the reflection-texture defect or guarantee every framebuffer effect is correct. Track reflection and other independent defects through the normal correctness gate. High-fps and widescreen fixes can wait until after the baseline port.
+
+## Reusable RetroAchievements stretch workstream
+
+### Scope and responsibility split
+
+Use the official open-source **rcheevos rc_client** as the runtime integration. RetroAchievements supplies achievement definitions, account unlock history and service-side progress; rc_client evaluates the downloaded conditions against game memory and manages sessions/submissions. The website cannot detect local gameplay by itself. We must supply the correct memory/frame view, HTTPS transport, account handling and UI, but should not recreate achievement rules, an unlock database, or a custom achievement backend.
+
+Keep the integration outside Conker's gameplay and original menus. Expose a small reusable module with:
+- A game adapter: original ROM identification, read-only memory access, authoritative frame/reset notifications, and capability/mod state.
+- A platform adapter: asynchronous HTTPS with certificate verification, credential storage, image cache, controller text input and overlay navigation.
+- A shared client/UI layer: login state, achievement lists, progress, notifications and connection status using rc_client data/events.
+
+Initially build this as a separate library/target inside this repository. Reuse its boundary for another port before extracting a separate repository, plugin ABI or elaborate framework. Feature-flag it so offline play and the base build do not depend on an account or network.
+
+### Compatibility gate before substantial implementation
+
+RetroAchievements' current standalone policy explicitly excludes decompilations, recompilations and unofficial ports from **standalone sets**. This project must not assume it can create a new standalone set. The candidate route is compatibility with the original N64 game's existing set, but the cited policy does not establish that this route is accepted for a recompile. Confirm the supported integration approach with RetroAchievements before enabling live earning in a distributed build. Hardcore validation is a further separate gate. This plan records the issue; no external message has been sent.
+
+Technical feasibility depends on original-memory compatibility, not merely having the same story and levels. Audit Conker's existing set, accepted ROM hashes, code notes and conditions. Compare representative memory reads and trigger traces with a supported N64 emulator using the same ROM. Conker's runtime stores RDRAM in native-endian 32-bit words; convert reads to the byte layout expected by the N64 set, including multi-byte/cross-word reads. Account for any hooks, altered structures and overlay/TLB behavior affecting the addresses the set reads. Never manufacture an original hash for a modified ROM or fabricate memory solely to trigger unlocks.
+
+Use official rcheevos hashing for the actual selected ROM. Its documentation identifies N64 by MD5 of the big-endian ROM representation; the game's separate ROM-validation scheme is not a replacement. Supported hashes and sets must be checked at implementation time. Start with the unmodified supported US ROM; asset hacks and gameplay mods are unqualified.
+
+Call rc_client_do_frame at the validated original emulated-frame boundary, independent of the 30 fps visual cap, display refresh, and skipped/interpolated frames. Determine that boundary from runtime/VI behavior and compare with emulator traces; do not simply call it 30 times per second. Serialize memory evaluation with a coherent game-state view; do not race arbitrary render/network threads against RDRAM.
+
+### Controller-first overlay
+
+A remappable hotkey opens the port overlay; start by evaluating a held touchpad-click shortcut and retain a menu entry. Avoid the system-reserved PS button. Consume shortcut/navigation input so it does not leak into gameplay. Reuse the port's renderer/UI rather than embedding a web browser or editing the original game menus.
+
+Minimum screens:
+- **Account:** sign in, current username, optional remember-login, sign out/forget credentials, clear network/login errors.
+- **Achievements:** all / unlocked / remaining filters, title, description, badge, points and measured progress when the set exposes it.
+- **Status:** achievements active/loading/unavailable; connection state and pending/error submissions distinguished from server-confirmed history.
+- **Notifications:** small optional unlock toast, with size/duration/sound controls and no game modification.
+
+Login uses the documented username/password flow through rc_client; remember the returned login token rather than the password. Use the PS5 text-entry service if usable, otherwise a controller-operated on-screen keyboard. Require no developer API key from the player. Protect tokens as far as the platform permits; never log credentials, and implement expiration/re-login. A phone/QR/device-code login is not assumed: the reviewed rc_client API documents password/token flows, not an OAuth device flow. A future alternative requires actual service support.
+
+If opening the overlay pauses the runtime, stop frame evaluation and keep rc_client_idle running for service work; an original in-game pause still follows the normal running-frame path. Resume without catch-up unlock bursts or input leakage. Start with softcore; do not claim verified earning or enable hardcore until service and timing/mod compatibility are established. Disable or qualify earning for incompatible changes rather than silently treating modified gameplay as the original.
+
+Networking must remain asynchronous and optional. Game launch/play continues when the service is unreachable. Use rc_client's session retry behavior and surface failed/pending submissions honestly; do not promise offline unlock persistence across process exits without verified library support. Cache bounded badge/list data for browsing where supported, but leave account unlock history authoritative on the service.
+
+### Stretch milestones
+
+| Gate | Result | Acceptance |
+| --- | --- | --- |
+| RA0 — Service and set feasibility | Written integration decision and Conker memory/timing audit | Supported route established; real ROM identification, compatible memory reads and frame cadence demonstrated. If unsupported, stop live-earning scope rather than invent a parallel backend. |
+| RA1 — Shared client and account overlay | Login and existing unlocked/remaining achievements visible | Verified HTTPS on PS5; controller text entry; token re-login and logout; no password retention; game still works offline. |
+| RA2 — Validated earning | Existing N64 conditions evaluated through rc_client | Coherent reads, correct frame/reset/pause behavior; representative unlocks match supported-emulator behavior; server confirms submissions; disconnect/retry tested. Use local tests/spectator mode before authorized live tests. |
+| RA3 — Reuse proof | Same client/overlay works through a second game's adapter | No Conker-specific branches in shared services/UI; per-game code limited to identification, memory, lifecycle and feature declarations. |
+| RA4 — Optional hardcore | Validated restrictive mode, only if accepted | RetroAchievements client validation plus required reset/pause/cheat/mod rules implemented and tested. Not a base-release requirement. |
+
+RA0 is a low-cost early investigation. RA1–RA2 implementation starts after the playable alpha and reusable overlay/network services exist. Neither RetroAchievements nor higher-aspect/high-fps experiments blocks the initial 4:3 / 30 fps release.
+
+Official references:
+- [rc_client integration, networking, login, lists and frame processing](https://github.com/RetroAchievements/rcheevos/wiki/rc_client-integration)
+- [rc_client public API](https://github.com/RetroAchievements/rcheevos/blob/develop/include/rc_client.h)
+- [N64 game identification](https://docs.retroachievements.org/developer-docs/game-identification.html)
+- [Standalone support policy](https://docs.retroachievements.org/general/standalone-support.html)
 
 ## Next implementation batch
 
 1. Record owner's firmware, homebrew enabler/title loader, display modes, and available test machine.
-2. Build a local desktop baseline using the owner's ROM and lock a coherent PS5 dependency set.
+2. Build a local desktop baseline at 4:3 / 30 fps using the owner's ROM and lock a coherent PS5 dependency set.
 3. Add the PS5 toolchain/host-tool separation and native diagnostic title.
 4. Create a small Vulkan capability/reporting executable and the Plume PS5 integration patch.
 5. Stop the batch at the first reproducible RT64 frame; collect console evidence before expanding gameplay scope.

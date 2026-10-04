@@ -193,9 +193,55 @@ Official references:
 - [N64 game identification](https://docs.retroachievements.org/developer-docs/game-identification.html)
 - [Standalone support policy](https://docs.retroachievements.org/general/standalone-support.html)
 
+## Repeatable PS5 recompile porting process
+
+A second project outcome is a documented, repeatable process for taking an existing recompile to PS5. Capture the process while building Conker, using commands, dependency pins, patches and console evidence that actually worked. A standalone conversion tool is not required.
+
+Initial reuse scope: recompiles using N64Recomp, N64ModernRuntime, RT64/Plume and similar frontend components. Projects with different renderers, runtimes or source-console architectures reuse the audit/build/test method, but need fresh technical assessment. Do not advertise a universal port recipe or assume matching dependency names imply compatible revisions.
+
+### Process to capture as milestones complete
+
+| Stage | Repeatable action | Durable output |
+| --- | --- | --- |
+| Audit | Identify runtime, renderer, frontend, generated sources, host tools, target dependencies and platform assumptions. | Completed compatibility worksheet and upstream baseline/known-defect record. |
+| Establish build | Separate host generators from target compilation; pin a compatible SDK/driver/dependency set; keep ROM inputs local. | Exact clean-build commands, dependency lock and input requirements. |
+| Prove platform | Bring up native title identity, logging, input, audio, paths, memory and threads independently. | Minimal diagnostic target and console smoke-test recipe. |
+| Prove renderer | Validate Vulkan loading/WSI and actual renderer shader/memory/synchronization requirements. | Reproducible platform patches and capability probes, with failure diagnostics. |
+| Attach game | Preserve game-specific boot behavior, callbacks, microcode, audio pacing and saves. | Small per-game integration layer and documented exceptions. |
+| Qualify | Compare representative scenes to the desktop baseline, measure timing/memory, test saves and lifecycle. | Common test matrix plus game-specific scene cases and run evidence. |
+| Package | Assign distinct title/data identities; stage required assets; retain notices; test updates. | Packaging/deployment commands, recovery instructions and release checklist. |
+| Reuse | Apply the instructions and shared pieces to another recompile. | Record of what transferred unchanged, required adaptations and actual effort. |
+
+For each resolved issue, record the symptom, cause, smallest fix, affected dependency revisions, reproduction command and validating console result. Keep instructions based on successful runs rather than speculative commands.
+
+### Boundaries for reusable code
+
+| Likely shared PS5 component | Per-game responsibility |
+| --- | --- |
+| Toolchain, host-tool execution and native-title packaging | Generated-code configuration, ROM requirements, unique title identity and assets |
+| RADV loading, display surface and presentation integration | Renderer revision/features and game-specific microcode/render fixes |
+| Pad, audio-device and filesystem services | Controls, source sample layout/rate, queue semantics and save format |
+| Overlay shell, prompts and settings widgets | Defaults, banner artwork and game-specific settings |
+| Logging, build identity and diagnostic capture | Scene coverage, expected behavior and game-specific fault context |
+| Optional RetroAchievements client/UI/transport | Accepted ROM identification, validated memory/frame adapter and service eligibility |
+
+Create these boundaries where they help the live port; extract additional abstractions only after genuine repetition. Do not force Conker's 4:3 / 30 fps settings, 736-frame audio adjustment, TLB mappings or particular renderer patches into defaults for unrelated games.
+
+### Completion criteria
+
+- By the first playable slice, document the known-working build, native-title and renderer bring-up sequence.
+- By release candidate, provide an end-to-end porting guide, reusable diagnostic/build pieces, a change inventory separating platform and game code, and a qualification checklist.
+- Conker ships when its own gates pass; completing a second game does not block that release.
+- Claim the process is validated across projects only after a small second-project proof reaches native launch and a first rendered game frame using the documented route. Full second-game development is a separate scope decision.
+- Keep RetroAchievements reuse optional and subject to its separate compatibility/service gates.
+
+## Owner-provided test environment
+
+Reported by the owner, not independently validated: firmware **13.42**; Relapse jailbreak; kstuff and etaHEN; ShadowMountPlus for native titles. Linux or Windows desktop is available for builds; final host selection, exact enabler/loader versions, display modes, local ROM path and remote execution access remain pending.
+
 ## Next implementation batch
 
-1. Record owner's firmware, homebrew enabler/title loader, display modes, and available test machine.
+1. Confirm the owner-provided target environment; record enabler/loader versions, display modes and the selected build host.
 2. Build a local desktop baseline at 4:3 / 30 fps using the owner's ROM and lock a coherent PS5 dependency set.
 3. Add the PS5 toolchain/host-tool separation and native diagnostic title.
 4. Create a small Vulkan capability/reporting executable and the Plume PS5 integration patch.
